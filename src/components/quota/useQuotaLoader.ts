@@ -11,6 +11,11 @@ import type { QuotaConfig } from './quotaConfigs';
 
 type QuotaScope = 'page' | 'all';
 
+interface LoadOptions {
+  maxConcurrency?: number;
+  onProgress?: (completed: number, total: number) => void;
+}
+
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaSetter<T> = (updater: QuotaUpdater<T>) => void;
@@ -37,12 +42,15 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
     async (
       targets: AuthFileItem[],
       scope: QuotaScope,
-      setLoading: (loading: boolean, scope?: QuotaScope | null) => void
+      setLoading: (loading: boolean, scope?: QuotaScope | null) => void,
+      options: LoadOptions = {}
     ) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
       const requestId = ++requestIdRef.current;
       setLoading(true, scope);
+
+      const { maxConcurrency = 12, onProgress } = options;
 
       try {
         if (targets.length === 0) return;
@@ -55,18 +63,36 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
           return nextState;
         });
 
-        const results = await Promise.all(
-          targets.map(async (file): Promise<LoadQuotaResult<TData>> => {
-            try {
-              const data = await config.fetchQuota(file, t);
-              return { name: file.name, status: 'success', data };
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : t('common.unknown_error');
-              const errorStatus = getStatusFromError(err);
-              return { name: file.name, status: 'error', error: message, errorStatus };
-            }
-          })
-        );
+        // 并发控制：分批处理
+        const results: LoadQuotaResult<TData>[] = [];
+        const total = targets.length;
+        let completed = 0;
+
+        // 过滤掉禁用的凭证
+        const enabledTargets = targets.filter((file) => !file.disabled);
+
+        for (let i = 0; i < enabledTargets.length; i += maxConcurrency) {
+          if (requestId !== requestIdRef.current) return;
+
+          const batch = enabledTargets.slice(i, i + maxConcurrency);
+          const batchResults = await Promise.all(
+            batch.map(async (file): Promise<LoadQuotaResult<TData>> => {
+              try {
+                const data = await config.fetchQuota(file, t);
+                completed++;
+                onProgress?.(completed, enabledTargets.length);
+                return { name: file.name, status: 'success', data };
+              } catch (err: unknown) {
+                completed++;
+                onProgress?.(completed, enabledTargets.length);
+                const message = err instanceof Error ? err.message : t('common.unknown_error');
+                const errorStatus = getStatusFromError(err);
+                return { name: file.name, status: 'error', error: message, errorStatus };
+              }
+            })
+          );
+          results.push(...batchResults);
+        }
 
         if (requestId !== requestIdRef.current) return;
 

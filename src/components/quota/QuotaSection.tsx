@@ -27,6 +27,7 @@ type ViewMode = 'paged' | 'all';
 
 const MAX_ITEMS_PER_PAGE = 25;
 const MAX_SHOW_ALL_THRESHOLD = 30;
+const MAX_CONCURRENCY = 12;
 
 interface QuotaPaginationState<T> {
   pageSize: number;
@@ -39,6 +40,8 @@ interface QuotaPaginationState<T> {
   loading: boolean;
   loadingScope: 'page' | 'all' | null;
   setLoading: (loading: boolean, scope?: 'page' | 'all' | null) => void;
+  progress: { completed: number; total: number } | null;
+  setProgress: (progress: { completed: number; total: number } | null) => void;
 }
 
 const useQuotaPagination = <T,>(items: T[], defaultPageSize = 6): QuotaPaginationState<T> => {
@@ -46,6 +49,7 @@ const useQuotaPagination = <T,>(items: T[], defaultPageSize = 6): QuotaPaginatio
   const [pageSize, setPageSizeState] = useState(defaultPageSize);
   const [loading, setLoadingState] = useState(false);
   const [loadingScope, setLoadingScope] = useState<'page' | 'all' | null>(null);
+  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(items.length / pageSize)),
@@ -75,6 +79,9 @@ const useQuotaPagination = <T,>(items: T[], defaultPageSize = 6): QuotaPaginatio
   const setLoading = useCallback((isLoading: boolean, scope?: 'page' | 'all' | null) => {
     setLoadingState(isLoading);
     setLoadingScope(isLoading ? (scope ?? null) : null);
+    if (!isLoading) {
+      setProgress(null);
+    }
   }, []);
 
   return {
@@ -87,7 +94,9 @@ const useQuotaPagination = <T,>(items: T[], defaultPageSize = 6): QuotaPaginatio
     goToNext,
     loading,
     loadingScope,
-    setLoading
+    setLoading,
+    progress,
+    setProgress
   };
 };
 
@@ -132,7 +141,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     goToPrev,
     goToNext,
     loading: sectionLoading,
-    setLoading
+    setLoading,
+    progress,
+    setProgress
   } = useQuotaPagination(filteredFiles);
 
   useEffect(() => {
@@ -183,8 +194,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     const scope = effectiveViewMode === 'all' ? 'all' : 'page';
     const targets = effectiveViewMode === 'all' ? filteredFiles : pageItems;
     if (targets.length === 0) return;
-    loadQuota(targets, scope, setLoading);
-  }, [loading, effectiveViewMode, filteredFiles, pageItems, loadQuota, setLoading]);
+    loadQuota(targets, scope, setLoading, {
+      maxConcurrency: MAX_CONCURRENCY,
+      onProgress: (completed, total) => setProgress({ completed, total })
+    });
+  }, [loading, effectiveViewMode, filteredFiles, pageItems, loadQuota, setLoading, setProgress]);
 
   useEffect(() => {
     if (loading) return;
@@ -249,6 +263,8 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   );
 
   const isRefreshing = sectionLoading || loading;
+  const enabledCount = filteredFiles.filter((f) => !f.disabled).length;
+  const enabledPageCount = pageItems.filter((f) => !f.disabled).length;
 
   return (
     <Card
@@ -294,7 +310,31 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             aria-label={t('quota_management.refresh_all_credentials')}
           >
             {!isRefreshing && <IconRefreshCw size={16} />}
-            {t('quota_management.refresh_all_credentials')}
+            {isRefreshing && progress ? `${progress.completed}/${progress.total}` : t('quota_management.refresh_all_credentials')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className={styles.refreshAllButton}
+            onClick={() => {
+              setViewMode('paged');
+              const targets = pageItems.filter((f) => !f.disabled);
+              if (targets.length === 0) return;
+              void (async () => {
+                setLoading(true, 'page');
+                setProgress({ completed: 0, total: targets.length });
+                await loadQuota(targets, 'page', setLoading, {
+                  maxConcurrency: MAX_CONCURRENCY,
+                  onProgress: (completed, total) => setProgress({ completed, total })
+                });
+              })();
+            }}
+            disabled={disabled || isRefreshing || enabledPageCount === 0}
+            title={t('quota_management.refresh_page_credentials')}
+            aria-label={t('quota_management.refresh_page_credentials')}
+          >
+            <IconRefreshCw size={16} />
+            {isRefreshing && progress && pageItems.length > 0 ? `${progress.completed}/${progress.total}` : t('quota_management.refresh_page_credentials')}
           </Button>
         </div>
       }

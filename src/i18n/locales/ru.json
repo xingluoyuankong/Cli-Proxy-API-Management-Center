@@ -482,6 +482,8 @@
     "refresh_not_available": "Н/Д",
     "refresh_just_now": "Только что",
     "download_button": "Скачать",
+    "copy_email_button": "Скопировать email",
+    "copy_email_success": "Email скопирован",
     "delete_button": "Удалить",
     "delete_confirm": "Удалить файл",
     "delete_all_confirm": "Удалить все файлы авторизации? Это действие нельзя отменить!",

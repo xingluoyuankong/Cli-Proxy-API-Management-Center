@@ -463,6 +463,19 @@ export function AuthFilesPage() {
     [showNotification, t]
   );
 
+  const copyEmailWithNotification = useCallback(
+    async (email: string) => {
+      const copied = await copyToClipboard(email);
+      showNotification(
+        copied
+          ? t('auth_files.copy_email_success', { defaultValue: 'Email copied' })
+          : t('notification.copy_failed', { defaultValue: 'Copy failed' }),
+        copied ? 'success' : 'error'
+      );
+    },
+    [showNotification, t]
+  );
+
   const openExcludedEditor = useCallback(
     (provider?: string) => {
       const providerValue = (provider || (filter !== 'all' ? String(filter) : '')).trim();
@@ -833,6 +846,7 @@ export function AuthFilesPage() {
                     quotaFilterType={quotaFilterType}
                     statusBarCache={statusBarCache}
                     onShowModels={showModels}
+                    onCopyEmail={copyEmailWithNotification}
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
                     onDelete={handleDelete}

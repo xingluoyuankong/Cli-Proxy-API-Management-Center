@@ -482,6 +482,8 @@
     "refresh_not_available": "暂无",
     "refresh_just_now": "刚刚",
     "download_button": "下载",
+    "copy_email_button": "复制邮箱",
+    "copy_email_success": "邮箱已复制",
     "access_token_badge": "AT",
     "access_token_badge_hint": "此凭证包含 Access Token",
     "delete_button": "删除",

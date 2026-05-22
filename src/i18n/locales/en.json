@@ -482,6 +482,8 @@
     "refresh_not_available": "N/A",
     "refresh_just_now": "Just now",
     "download_button": "Download",
+    "copy_email_button": "Copy email",
+    "copy_email_success": "Email copied",
     "access_token_badge": "AT",
     "access_token_badge_hint": "This credential contains an access token",
     "delete_button": "Delete",

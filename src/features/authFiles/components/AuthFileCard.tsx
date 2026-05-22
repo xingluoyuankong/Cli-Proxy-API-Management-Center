@@ -6,6 +6,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   IconDownload,
   IconInfo,
+  IconMail,
   IconModelCluster,
   IconSettings,
   IconTrash2,
@@ -50,6 +51,7 @@ export type AuthFileCardProps = {
   quotaFilterType: QuotaProviderType | null;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   onShowModels: (file: AuthFileItem) => void;
+  onCopyEmail: (email: string) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -61,6 +63,52 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   const provider = resolveAuthProvider(file);
   if (!QUOTA_PROVIDER_TYPES.has(provider as QuotaProviderType)) return null;
   return provider as QuotaProviderType;
+};
+
+const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const EMAIL_KEYS = [
+  'email',
+  'account_email',
+  'accountEmail',
+  'email_address',
+  'emailAddress',
+  'user_email',
+  'userEmail',
+];
+const EMAIL_NESTED_KEYS = ['metadata', 'attributes', 'account', 'profile', 'user'];
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const extractEmailAddress = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim().match(EMAIL_PATTERN)?.[0] ?? '';
+};
+
+const findEmailInRecord = (record: Record<string, unknown> | null): string => {
+  if (!record) return '';
+  for (const key of EMAIL_KEYS) {
+    const email = extractEmailAddress(record[key]);
+    if (email) return email;
+  }
+  return '';
+};
+
+const resolveAuthFileEmail = (file: AuthFileItem): string => {
+  const record = file as Record<string, unknown>;
+  const directEmail = findEmailInRecord(record);
+  if (directEmail) return directEmail;
+
+  for (const key of EMAIL_NESTED_KEYS) {
+    const nestedEmail = findEmailInRecord(asRecord(record[key]));
+    if (nestedEmail) return nestedEmail;
+  }
+
+  const accountType =
+    typeof record.account_type === 'string' ? record.account_type.trim().toLowerCase() : '';
+  return accountType === 'oauth' ? extractEmailAddress(record.account) : '';
 };
 
 export function AuthFileCard(props: AuthFileCardProps) {
@@ -76,6 +124,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     quotaFilterType,
     statusBarCache,
     onShowModels,
+    onCopyEmail,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -95,6 +144,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(providerKey, resolvedTheme);
   const typeLabel = getTypeLabel(t, providerKey);
   const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
+  const emailValue = resolveAuthFileEmail(file);
 
   const resolvedQuotaType = resolveQuotaType(file);
   const quotaType =
@@ -291,6 +341,18 @@ export function AuthFileCard(props: AuthFileCardProps) {
               )}
               {!isRuntimeOnly && (
                 <div className={styles.cardUtilityActions}>
+                  {emailValue && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onCopyEmail(emailValue)}
+                      className={styles.iconButton}
+                      title={t('auth_files.copy_email_button')}
+                      aria-label={t('auth_files.copy_email_button')}
+                    >
+                      <IconMail className={styles.actionIcon} size={16} />
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     size="sm"

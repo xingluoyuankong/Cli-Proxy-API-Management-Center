@@ -65,7 +65,6 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
 
         // 并发控制：分批处理
         const results: LoadQuotaResult<TData>[] = [];
-        const total = targets.length;
         let completed = 0;
 
         // 过滤掉禁用的凭证

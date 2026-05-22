@@ -25,9 +25,11 @@ export interface UseUsageDataReturn {
   handleExport: () => Promise<void>;
   handleImport: () => void;
   handleImportChange: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleClearRuntimeCache: () => Promise<void>;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   exporting: boolean;
   importing: boolean;
+  clearingRuntimeCache: boolean;
 }
 
 export function useUsageData(): UseUsageDataReturn {
@@ -42,6 +44,7 @@ export function useUsageData(): UseUsageDataReturn {
   const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>({});
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [clearingRuntimeCache, setClearingRuntimeCache] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadUsage = useCallback(async () => {
@@ -134,6 +137,22 @@ export function useUsageData(): UseUsageDataReturn {
     saveModelPrices(prices);
   }, []);
 
+  const handleClearRuntimeCache = async () => {
+    setClearingRuntimeCache(true);
+    try {
+      await usageApi.clearRuntimeCache();
+      showNotification(t('usage_stats.runtime_cache_clear_success'), 'success');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      showNotification(
+        `${t('usage_stats.runtime_cache_clear_failed')}${message ? `: ${message}` : ''}`,
+        'error'
+      );
+    } finally {
+      setClearingRuntimeCache(false);
+    }
+  };
+
   const usage = usageSnapshot as UsagePayload | null;
   const error = storeError || '';
   const lastRefreshedAt = lastRefreshedAtTs ? new Date(lastRefreshedAtTs) : null;
@@ -149,8 +168,10 @@ export function useUsageData(): UseUsageDataReturn {
     handleExport,
     handleImport,
     handleImportChange,
+    handleClearRuntimeCache,
     importInputRef,
     exporting,
-    importing
+    importing,
+    clearingRuntimeCache
   };
 }

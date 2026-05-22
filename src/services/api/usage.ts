@@ -22,6 +22,12 @@ export interface UsageImportResponse {
   [key: string]: unknown;
 }
 
+export interface RuntimeCacheClearResponse {
+  success?: boolean;
+  cleared?: string[];
+  [key: string]: unknown;
+}
+
 export const usageApi = {
   /**
    * 获取使用统计原始数据
@@ -38,6 +44,16 @@ export const usageApi = {
    */
   importUsage: (payload: unknown) =>
     apiClient.post<UsageImportResponse>('/usage/import', payload, { timeout: USAGE_TIMEOUT_MS }),
+
+  /**
+   * 清理运行时缓存，不影响使用统计
+   */
+  clearRuntimeCache: () =>
+    apiClient.post<RuntimeCacheClearResponse>(
+      '/runtime-cache/clear',
+      {},
+      { timeout: USAGE_TIMEOUT_MS }
+    ),
 
   /**
    * 计算密钥成功/失败统计，必要时会先获取 usage 数据

@@ -138,7 +138,7 @@ class ApiClient {
       const responseData: unknown = error.response?.data;
       const responseRecord = isRecord(responseData) ? responseData : null;
       const errorValue = responseRecord?.error;
-      const message =
+      const rawMessage =
         typeof errorValue === 'string'
           ? errorValue
           : isRecord(errorValue) && typeof errorValue.message === 'string'
@@ -146,6 +146,10 @@ class ApiClient {
             : typeof responseRecord?.message === 'string'
               ? responseRecord.message
               : error.message || 'Request failed';
+      const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout');
+      const message = isTimeout
+        ? `请求超时（前端等待 ${Math.round((error.config?.timeout ?? REQUEST_TIMEOUT_MS) / 1000)} 秒）。如果后端稍后返回，多半是上游接口太慢、代理不通，或目标服务无响应。`
+        : rawMessage;
       const apiError = new Error(message) as ApiError;
       apiError.name = 'ApiError';
       apiError.status = error.response?.status;

@@ -32,18 +32,26 @@ function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): s
           ? error
           : '';
 
+  const withDetail = (fallback: string): string => {
+    const detail = message.trim();
+    if (!detail) return fallback;
+    const normalizedFallback = fallback.trim().toLowerCase();
+    if (detail.toLowerCase() === normalizedFallback) return fallback;
+    return `${fallback}: ${detail}`;
+  };
+
   // 根据 HTTP 状态码判断
   if (status === 401) {
-    return t('login.error_unauthorized');
+    return withDetail(t('login.error_unauthorized'));
   }
   if (status === 403) {
-    return t('login.error_forbidden');
+    return withDetail(t('login.error_forbidden'));
   }
   if (status === 404) {
-    return t('login.error_not_found');
+    return withDetail(t('login.error_not_found'));
   }
   if (status && status >= 500) {
-    return t('login.error_server');
+    return withDetail(t('login.error_server'));
   }
 
   // 根据 axios 错误码判断

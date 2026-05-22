@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNotificationStore, useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
@@ -178,9 +177,16 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const prevFilesLoadingRef = useRef(loading);
 
   const handleRefresh = useCallback(() => {
-    pendingQuotaRefreshRef.current = true;
-    void triggerHeaderRefresh();
-  }, []);
+    // 刷新所有已启用的凭证
+    const allEnabledFiles = filteredFiles.filter((f) => !f.disabled);
+    if (allEnabledFiles.length === 0) return;
+    setLoading(true, 'all');
+    setProgress({ completed: 0, total: allEnabledFiles.length });
+    void loadQuota(allEnabledFiles, 'all', setLoading, {
+      maxConcurrency: MAX_CONCURRENCY,
+      onProgress: (completed, total) => setProgress({ completed, total })
+    });
+  }, [filteredFiles, loadQuota, setLoading, setProgress]);
 
   useEffect(() => {
     const wasLoading = prevFilesLoadingRef.current;
@@ -263,7 +269,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   );
 
   const isRefreshing = sectionLoading || loading;
-  const enabledCount = filteredFiles.filter((f) => !f.disabled).length;
   const enabledPageCount = pageItems.filter((f) => !f.disabled).length;
 
   return (

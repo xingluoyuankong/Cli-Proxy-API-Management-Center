@@ -14,6 +14,32 @@ import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
 
+const clearLegacyAuthCache = (): void => {
+  localStorage.removeItem('isLoggedIn');
+  localStorage.removeItem('apiBase');
+  localStorage.removeItem('apiUrl');
+  localStorage.removeItem('managementKey');
+  obfuscatedStorage.removeItem(STORAGE_KEY_AUTH);
+};
+
+const shouldClearStoredAuth = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+
+  const apiError = error as Partial<{ status: number; message: string }>;
+  const status = typeof apiError.status === 'number' ? apiError.status : undefined;
+  const message = typeof apiError.message === 'string' ? apiError.message.toLowerCase() : '';
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    message.includes('invalid management key') ||
+    message.includes('missing management key') ||
+    message.includes('remote management disabled') ||
+    message.includes('remote management key not set')
+  );
+};
+
 interface AuthStoreState extends AuthState {
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
@@ -77,6 +103,20 @@ export const useAuthStore = create<AuthStoreState>()(
               return true;
             } catch (error) {
               console.warn('Auto login failed:', error);
+              if (shouldClearStoredAuth(error)) {
+                clearLegacyAuthCache();
+                set({
+                  isAuthenticated: false,
+                  apiBase: resolvedBase,
+                  managementKey: '',
+                  rememberPassword: false,
+                  connectionStatus: 'disconnected',
+                  connectionError: null,
+                  serverVersion: null,
+                  serverBuildDate: null
+                });
+                apiClient.setConfig({ apiBase: resolvedBase, managementKey: '' });
+              }
               return false;
             }
           }

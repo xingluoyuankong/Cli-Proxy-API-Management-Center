@@ -88,8 +88,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeLabel = getTypeLabel(t, file.type || 'unknown');
   const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
 
+  const resolvedQuotaType = resolveQuotaType(file);
   const quotaType =
-    quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
+    quotaFilterType && resolvedQuotaType === quotaFilterType ? quotaFilterType : resolvedQuotaType;
 
   const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
@@ -116,6 +117,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
+  const usesAccessToken = file.uses_access_token === true || file.usesAccessToken === true;
   const stateLabel = isRuntimeOnly
     ? t('auth_files.type_virtual') || '虚拟认证文件'
     : file.disabled
@@ -179,6 +181,14 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 >
                   {typeLabel}
                 </span>
+                {usesAccessToken && (
+                  <span
+                    className={`${styles.credentialBadge} ${styles.credentialBadgeAccessToken}`}
+                    title={t('auth_files.access_token_badge_hint')}
+                  >
+                    {t('auth_files.access_token_badge')}
+                  </span>
+                )}
                 <span className={`${styles.stateBadge} ${stateBadgeClass}`}>{stateLabel}</span>
               </div>
               <span className={styles.fileName} title={file.name}>

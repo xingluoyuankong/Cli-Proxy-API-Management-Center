@@ -886,6 +886,26 @@
   letter-spacing: 0.02em;
 }
 
+.credentialBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.credentialBadgeAccessToken {
+  color: #7c2d12;
+  background: linear-gradient(135deg, #fed7aa, #fdba74);
+  border: 1px solid #fb923c;
+  box-shadow: 0 6px 14px -10px rgba(249, 115, 22, 0.9);
+}
+
 .stateBadgeActive {
   color: var(--success-badge-text, #065f46);
   background: var(--success-badge-bg, #d1fae5);

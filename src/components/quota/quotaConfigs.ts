@@ -32,6 +32,7 @@ import type {
 import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
 import { useQuotaStore } from '@/stores';
 import {
+  ANTIGRAVITY_CODE_ASSIST_URL,
   ANTIGRAVITY_QUOTA_URLS,
   ANTIGRAVITY_REQUEST_HEADERS,
   CLAUDE_PROFILE_URL,
@@ -86,6 +87,8 @@ type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi';
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
+const QUOTA_REQUEST_TIMEOUT_MS = 75 * 1000;
+const ANTIGRAVITY_QUOTA_REQUEST_TIMEOUT_MS = 8 * 1000;
 const geminiCliSupplementaryRequestIds = new Map<string, number>();
 const geminiCliSupplementaryCache = new Map<
   string,
@@ -156,10 +159,100 @@ const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> 
   return DEFAULT_ANTIGRAVITY_PROJECT_ID;
 };
 
+const resolveAntigravityTierLabel = (
+  payload: GeminiCliCodeAssistPayload | null,
+  t: TFunction
+): string | null => {
+  if (!payload) return null;
+  const currentTier: GeminiCliUserTier | null | undefined =
+    payload.currentTier ?? payload.current_tier;
+  const paidTier: GeminiCliUserTier | null | undefined =
+    payload.paidTier ?? payload.paid_tier;
+  const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
+  if (!rawId) return null;
+  const tierId = rawId.toLowerCase();
+  const labelKey = ANTIGRAVITY_TIER_LABELS[tierId];
+  return labelKey ? t(`gemini_cli_quota.${labelKey}`) : rawId;
+};
+
+const resolveAntigravityTierId = (
+  payload: GeminiCliCodeAssistPayload | null
+): string | null => {
+  if (!payload) return null;
+  const currentTier: GeminiCliUserTier | null | undefined =
+    payload.currentTier ?? payload.current_tier;
+  const paidTier: GeminiCliUserTier | null | undefined =
+    payload.paidTier ?? payload.paid_tier;
+  const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
+  return rawId ? rawId.toLowerCase() : null;
+};
+
+const resolveAntigravityCreditBalance = (
+  payload: GeminiCliCodeAssistPayload | null
+): number | null => {
+  if (!payload) return null;
+  const paidTier: GeminiCliUserTier | null | undefined =
+    payload.paidTier ?? payload.paid_tier;
+  const currentTier: GeminiCliUserTier | null | undefined =
+    payload.currentTier ?? payload.current_tier;
+  const tier = paidTier ?? currentTier;
+  if (!tier) return null;
+  const credits: GeminiCliCredits[] = tier.availableCredits ?? tier.available_credits ?? [];
+  let total = 0;
+  let found = false;
+  for (const credit of credits) {
+    const creditType = normalizeStringValue(credit.creditType ?? credit.credit_type);
+    if (creditType !== GEMINI_CLI_G1_CREDIT_TYPE) continue;
+    const amount = normalizeNumberValue(credit.creditAmount ?? credit.credit_amount);
+    if (amount !== null) {
+      total += amount;
+      found = true;
+    }
+  }
+  return found ? total : null;
+};
+
+const fetchAntigravityCodeAssist = async (
+  authIndex: string,
+  projectId: string,
+  t: TFunction
+): Promise<{ tierLabel: string | null; tierId: string | null; creditBalance: number | null }> => {
+  try {
+    const result = await apiCallApi.request({
+      authIndex,
+      forceRefresh: true,
+      method: 'POST',
+      url: ANTIGRAVITY_CODE_ASSIST_URL,
+      header: { ...ANTIGRAVITY_REQUEST_HEADERS },
+      data: JSON.stringify({
+        metadata: {
+          ide_name: 'antigravity',
+          ide_type: 'ANTIGRAVITY',
+          ide_version: '1.23.2',
+        },
+        cloudaicompanionProject: projectId,
+      }),
+    }, { timeout: ANTIGRAVITY_QUOTA_REQUEST_TIMEOUT_MS });
+
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      return { tierLabel: null, tierId: null, creditBalance: null };
+    }
+
+    const payload = parseGeminiCliCodeAssistPayload(result.body ?? result.bodyText);
+    return {
+      tierLabel: resolveAntigravityTierLabel(payload, t),
+      tierId: resolveAntigravityTierId(payload),
+      creditBalance: resolveAntigravityCreditBalance(payload),
+    };
+  } catch {
+    return { tierLabel: null, tierId: null, creditBalance: null };
+  }
+};
+
 const fetchAntigravityQuota = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<AntigravityQuotaGroup[]> => {
+): Promise<{ groups: AntigravityQuotaGroup[]; tierLabel: string | null; tierId: string | null; creditBalance: number | null }> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -169,12 +262,7 @@ const fetchAntigravityQuota = async (
   const projectId = await resolveAntigravityProjectId(file);
   const requestBody = JSON.stringify({ project: projectId });
 
-  let lastError = '';
-  let lastStatus: number | undefined;
-  let priorityStatus: number | undefined;
-  let hadSuccess = false;
-
-  for (const url of ANTIGRAVITY_QUOTA_URLS) {
+  const attempts = ANTIGRAVITY_QUOTA_URLS.map(async (url) => {
     try {
       const result = await apiCallApi.request({
         authIndex,
@@ -182,49 +270,83 @@ const fetchAntigravityQuota = async (
         url,
         header: { ...ANTIGRAVITY_REQUEST_HEADERS },
         data: requestBody,
-      });
+      }, { timeout: ANTIGRAVITY_QUOTA_REQUEST_TIMEOUT_MS });
 
       if (result.statusCode < 200 || result.statusCode >= 300) {
-        lastError = getApiCallErrorMessage(result);
-        lastStatus = result.statusCode;
-        if (result.statusCode === 403 || result.statusCode === 404) {
-          priorityStatus ??= result.statusCode;
-        }
-        continue;
+        return {
+          ok: false as const,
+          message: getApiCallErrorMessage(result),
+          status: result.statusCode,
+          empty: false,
+        };
       }
 
-      hadSuccess = true;
       const payload = parseAntigravityPayload(result.body ?? result.bodyText);
       const models = payload?.models;
       if (!models || typeof models !== 'object' || Array.isArray(models)) {
-        lastError = t('antigravity_quota.empty_models');
-        continue;
+        return {
+          ok: false as const,
+          message: t('antigravity_quota.empty_models'),
+          status: undefined,
+          empty: true,
+        };
       }
 
       const groups = buildAntigravityQuotaGroups(models as AntigravityModelsPayload);
       if (groups.length === 0) {
-        lastError = t('antigravity_quota.empty_models');
-        continue;
+        return {
+          ok: false as const,
+          message: t('antigravity_quota.empty_models'),
+          status: undefined,
+          empty: true,
+        };
       }
 
-      return groups;
+      return {
+        ok: true as const,
+        groups,
+      };
     } catch (err: unknown) {
-      lastError = err instanceof Error ? err.message : t('common.unknown_error');
-      const status = getStatusFromError(err);
-      if (status) {
-        lastStatus = status;
-        if (status === 403 || status === 404) {
-          priorityStatus ??= status;
-        }
-      }
+      return {
+        ok: false as const,
+        message: err instanceof Error ? err.message : t('common.unknown_error'),
+        status: getStatusFromError(err),
+        empty: false,
+      };
     }
+  });
+
+  const settled = await Promise.all(attempts);
+  const success = settled.find((item) => item.ok);
+  if (success && success.ok) {
+    const supplementary = await fetchAntigravityCodeAssist(authIndex, projectId, t);
+    return {
+      groups: success.groups,
+      tierLabel: supplementary.tierLabel,
+      tierId: supplementary.tierId,
+      creditBalance: supplementary.creditBalance,
+    };
   }
 
-  if (hadSuccess) {
-    return [];
+  const nonEmptyFailure = settled.find((item) => !item.ok && !item.empty && item.status !== 404 && item.status !== 403);
+  if (nonEmptyFailure && !nonEmptyFailure.ok) {
+    throw createStatusError(nonEmptyFailure.message || t('common.unknown_error'), nonEmptyFailure.status);
   }
 
-  throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
+  const priorityFailure = settled.find((item) => !item.ok && (item.status === 403 || item.status === 404));
+  if (priorityFailure && !priorityFailure.ok) {
+    throw createStatusError(priorityFailure.message || t('common.unknown_error'), priorityFailure.status);
+  }
+
+  if (settled.some((item) => !item.ok && item.empty)) {
+    return { groups: [], tierLabel: null, tierId: null, creditBalance: null };
+  }
+
+  const fallbackFailure = settled.find((item) => !item.ok);
+  throw createStatusError(
+    !fallbackFailure || fallbackFailure.ok ? t('common.unknown_error') : fallbackFailure.message || t('common.unknown_error'),
+    !fallbackFailure || fallbackFailure.ok ? undefined : fallbackFailure.status
+  );
 };
 
 const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): CodexQuotaWindow[] => {
@@ -410,21 +532,21 @@ const fetchCodexQuota = async (
 
   const planTypeFromFile = resolveCodexPlanType(file);
   const accountId = resolveCodexChatgptAccountId(file);
-  if (!accountId) {
-    throw new Error(t('codex_quota.missing_account_id'));
-  }
 
   const requestHeader: Record<string, string> = {
     ...CODEX_REQUEST_HEADERS,
-    'Chatgpt-Account-Id': accountId,
   };
+  if (accountId) {
+    requestHeader['Chatgpt-Account-Id'] = accountId;
+  }
 
   const result = await apiCallApi.request({
     authIndex,
+    forceRefresh: true,
     method: 'GET',
     url: CODEX_USAGE_URL,
     header: requestHeader,
-  });
+  }, { timeout: QUOTA_REQUEST_TIMEOUT_MS });
 
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
@@ -441,6 +563,14 @@ const fetchCodexQuota = async (
 };
 
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
+
+const ANTIGRAVITY_TIER_LABELS: Record<string, string> = {
+  'free-tier': 'tier_free',
+  'legacy-tier': 'tier_legacy',
+  'standard-tier': 'tier_standard',
+  'g1-pro-tier': 'tier_pro',
+  'g1-ultra-tier': 'tier_ultra',
+};
 
 const GEMINI_CLI_TIER_LABELS: Record<string, string> = {
   'free-tier': 'tier_free',
@@ -524,7 +654,7 @@ const fetchGeminiCliCodeAssist = async (
           duetProject: projectId,
         },
       }),
-    });
+    }, { timeout: QUOTA_REQUEST_TIMEOUT_MS });
 
     if (result.statusCode < 200 || result.statusCode >= 300) {
       return { tierLabel: null, tierId: null, creditBalance: null };
@@ -632,7 +762,7 @@ const fetchGeminiCliQuota = async (
     url: GEMINI_CLI_QUOTA_URL,
     header: { ...GEMINI_CLI_REQUEST_HEADERS },
     data: JSON.stringify({ project: projectId }),
-  });
+  }, { timeout: QUOTA_REQUEST_TIMEOUT_MS });
   if (quotaResponse.statusCode < 200 || quotaResponse.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(quotaResponse), quotaResponse.statusCode);
   }
@@ -697,14 +827,47 @@ const renderAntigravityItems = (
   helpers: QuotaRenderHelpers
 ): ReactNode => {
   const { styles: styleMap, QuotaProgressBar } = helpers;
-  const { createElement: h } = React;
+  const { createElement: h, Fragment } = React;
   const groups = quota.groups ?? [];
+  const tierLabel = quota.tierLabel ?? null;
+  const tierId = quota.tierId ?? null;
+  const creditBalance = quota.creditBalance ?? null;
+  const isPremiumTier = tierId !== null && PREMIUM_GEMINI_CLI_TIER_IDS.has(tierId);
+  const nodes: ReactNode[] = [];
 
-  if (groups.length === 0) {
-    return h('div', { className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'));
+  if (tierLabel) {
+    const valueClass = isPremiumTier ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
+    nodes.push(
+      h(
+        'div',
+        { key: 'tier', className: styleMap.codexPlan },
+        h('span', { className: styleMap.codexPlanLabel }, t('gemini_cli_quota.tier_label')),
+        h('span', { className: valueClass }, tierLabel)
+      )
+    );
   }
 
-  return groups.map((group) => {
+  if (creditBalance !== null) {
+    nodes.push(
+      h(
+        'div',
+        { key: 'credits', className: styleMap.codexPlan },
+        h('span', { className: styleMap.codexPlanLabel }, t('gemini_cli_quota.credit_label')),
+        h(
+          'span',
+          { className: styleMap.codexPlanValue },
+          t('gemini_cli_quota.credit_amount', { count: creditBalance })
+        )
+      )
+    );
+  }
+
+  if (groups.length === 0) {
+    nodes.push(h('div', { key: 'empty', className: styleMap.quotaMessage }, t('antigravity_quota.empty_models')));
+    return h(Fragment, null, ...nodes);
+  }
+
+  nodes.push(...groups.map((group) => {
     const clamped = Math.max(0, Math.min(1, group.remainingFraction));
     const percent = Math.round(clamped * 100);
     const resetLabel = formatQuotaResetTime(group.resetTime);
@@ -729,7 +892,9 @@ const renderAntigravityItems = (
         mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
       })
     );
-  });
+  }));
+
+  return h(Fragment, null, ...nodes);
 };
 
 const PREMIUM_GEMINI_CLI_TIER_IDS = new Set(['g1-ultra-tier']);
@@ -995,13 +1160,13 @@ const fetchClaudeQuota = async (
       method: 'GET',
       url: CLAUDE_USAGE_URL,
       header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
+    }, { timeout: QUOTA_REQUEST_TIMEOUT_MS }),
     apiCallApi.request({
       authIndex,
       method: 'GET',
       url: CLAUDE_PROFILE_URL,
       header: { ...CLAUDE_REQUEST_HEADERS },
-    }),
+    }, { timeout: QUOTA_REQUEST_TIMEOUT_MS }),
   ]);
 
   if (usageResult.status === 'rejected') {
@@ -1139,7 +1304,7 @@ export const CLAUDE_CONFIG: QuotaConfig<
   renderQuotaItems: renderClaudeItems,
 };
 
-export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQuotaGroup[]> = {
+export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, { groups: AntigravityQuotaGroup[]; tierLabel: string | null; tierId: string | null; creditBalance: number | null }> = {
   type: 'antigravity',
   i18nPrefix: 'antigravity_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
@@ -1147,11 +1312,20 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
   fetchQuota: fetchAntigravityQuota,
   storeSelector: (state) => state.antigravityQuota,
   storeSetter: 'setAntigravityQuota',
-  buildLoadingState: () => ({ status: 'loading', groups: [] }),
-  buildSuccessState: (groups) => ({ status: 'success', groups }),
+  buildLoadingState: () => ({ status: 'loading', groups: [], tierLabel: null, tierId: null, creditBalance: null }),
+  buildSuccessState: (data) => ({
+    status: 'success',
+    groups: data.groups,
+    tierLabel: data.tierLabel,
+    tierId: data.tierId,
+    creditBalance: data.creditBalance,
+  }),
   buildErrorState: (message, status) => ({
     status: 'error',
     groups: [],
+    tierLabel: null,
+    tierId: null,
+    creditBalance: null,
     error: message,
     errorStatus: status,
   }),
@@ -1254,7 +1428,7 @@ const fetchKimiQuota = async (
     method: 'GET',
     url: KIMI_USAGE_URL,
     header: { ...KIMI_REQUEST_HEADERS },
-  });
+  }, { timeout: QUOTA_REQUEST_TIMEOUT_MS });
 
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);

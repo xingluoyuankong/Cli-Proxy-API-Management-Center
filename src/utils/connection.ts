@@ -1,9 +1,20 @@
 import { DEFAULT_API_PORT, MANAGEMENT_API_PREFIX } from './constants';
 
+const REDUNDANT_API_SUFFIX_PATTERNS = [
+  /\/?management\.html\/?$/i,
+  /\/?v0\/management\/config(?:\.yaml)?\/?$/i,
+  /\/?v0\/management\/?$/i,
+  /\/?config(?:\.yaml)?\/?$/i
+];
+
 export const normalizeApiBase = (input: string): string => {
   let base = (input || '').trim();
   if (!base) return '';
-  base = base.replace(/\/?v0\/management\/?$/i, '');
+
+  for (const pattern of REDUNDANT_API_SUFFIX_PATTERNS) {
+    base = base.replace(pattern, '');
+  }
+
   base = base.replace(/\/+$/i, '');
   if (!/^https?:\/\//i.test(base)) {
     base = `http://${base}`;

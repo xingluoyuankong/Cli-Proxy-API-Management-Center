@@ -16,7 +16,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { useThemeStore, useConfigStore } from '@/stores';
+import { useThemeStore, useConfigStore, useNotificationStore } from '@/stores';
 import {
   StatCards,
   UsageChart,
@@ -121,6 +121,7 @@ export function UsagePage() {
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isDark = resolvedTheme === 'dark';
   const config = useConfigStore((state) => state.config);
+  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
 
   // Data hook
   const {
@@ -134,9 +135,11 @@ export function UsagePage() {
     handleExport,
     handleImport,
     handleImportChange,
+    handleClearRuntimeCache,
     importInputRef,
     exporting,
-    importing
+    importing,
+    clearingRuntimeCache
   } = useUsageData();
 
   useHeaderRefresh(loadUsage);
@@ -222,6 +225,16 @@ export function UsagePage() {
   );
   const hasPrices = Object.keys(modelPrices).length > 0;
 
+  const confirmClearRuntimeCache = useCallback(() => {
+    showConfirmation({
+      title: t('usage_stats.runtime_cache_clear_title'),
+      message: t('usage_stats.runtime_cache_clear_confirm'),
+      confirmText: t('usage_stats.runtime_cache_clear_confirm_action'),
+      variant: 'danger',
+      onConfirm: handleClearRuntimeCache
+    });
+  }, [handleClearRuntimeCache, showConfirmation, t]);
+
   return (
     <div className={styles.container}>
       {loading && !usage && (
@@ -252,7 +265,7 @@ export function UsagePage() {
             size="sm"
             onClick={handleExport}
             loading={exporting}
-            disabled={loading || importing}
+            disabled={loading || importing || clearingRuntimeCache}
           >
             {t('usage_stats.export')}
           </Button>
@@ -261,15 +274,24 @@ export function UsagePage() {
             size="sm"
             onClick={handleImport}
             loading={importing}
-            disabled={loading || exporting}
+            disabled={loading || exporting || clearingRuntimeCache}
           >
             {t('usage_stats.import')}
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => void loadUsage().catch(() => {})}
+            onClick={confirmClearRuntimeCache}
+            loading={clearingRuntimeCache}
             disabled={loading || exporting || importing}
+          >
+            {t('usage_stats.runtime_cache_clear')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void loadUsage().catch(() => {})}
+            disabled={loading || exporting || importing || clearingRuntimeCache}
           >
             {loading ? t('common.loading') : t('usage_stats.refresh')}
           </Button>

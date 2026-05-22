@@ -10,9 +10,11 @@ import { statusBarDataFromRecentRequests } from '@/utils/recentRequests';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ProviderStatusBar } from '../ProviderStatusBar';
+import { ProviderUsageStats } from '../ProviderUsageStats';
 import {
   getProviderConfigKey,
   getProviderRecentBuckets,
+  getProviderRecentMetrics,
   getProviderTotalStats,
   hasDisableAllModelsRule,
   type ProviderRecentUsageMap,
@@ -97,6 +99,12 @@ export function ClaudeSection({
           )}
           renderContent={(item, index) => {
             const stats = getProviderTotalStats(
+              usageByProvider,
+              'claude',
+              item.apiKey,
+              item.baseUrl
+            );
+            const metrics = getProviderRecentMetrics(
               usageByProvider,
               'claude',
               item.apiKey,
@@ -209,14 +217,7 @@ export function ClaudeSection({
                     </div>
                   </div>
                 ) : null}
-                <div className={styles.cardStats}>
-                  <span className={`${styles.statPill} ${styles.statSuccess}`}>
-                    {t('stats.success')}: {stats.success}
-                  </span>
-                  <span className={`${styles.statPill} ${styles.statFailure}`}>
-                    {t('stats.failure')}: {stats.failure}
-                  </span>
-                </div>
+                <ProviderUsageStats totals={stats} metrics={metrics} />
                 <ProviderStatusBar statusData={statusData} />
               </Fragment>
             );

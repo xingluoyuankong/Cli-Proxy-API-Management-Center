@@ -7,12 +7,14 @@ import type {
 } from '@/types';
 import {
   buildRecentRequestCompositeKey,
+  getRecentRequestWindowStats,
   mergeRecentRequestBucketGroups,
   normalizeRecentRequestAuthIndex,
   statusBarDataFromRecentRequests,
   sumRecentRequests,
   type RecentRequestBucket,
   type RecentRequestUsageEntry,
+  type RecentRequestWindowStats,
   type StatusBarData,
 } from '@/utils/recentRequests';
 import type { AmpcodeFormState, AmpcodeUpstreamApiKeyEntry, ModelEntry } from './types';
@@ -159,6 +161,31 @@ export function getProviderRecentWindowStats(
   return sumRecentRequests(getProviderRecentBuckets(usageByProvider, provider, apiKey, baseUrl));
 }
 
+export function getProviderRecentMetrics(
+  usageByProvider: ProviderRecentUsageMap,
+  provider: string,
+  apiKey?: string,
+  baseUrl?: string
+): RecentRequestWindowStats {
+  const entry = getProviderRecentUsageEntry(usageByProvider, provider, apiKey, baseUrl);
+  const fromBuckets = getRecentRequestWindowStats(entry.recentRequests);
+  if (!entry.summary) {
+    return fromBuckets;
+  }
+  return {
+    ...fromBuckets,
+    requests: entry.summary.windowRequests || fromBuckets.requests,
+    instantRpm: entry.summary.instantRpm || fromBuckets.instantRpm,
+    averageRpm: entry.summary.averageRpm || fromBuckets.averageRpm,
+    instantLatencyMs: entry.summary.instantLatencyMs || fromBuckets.instantLatencyMs,
+    averageLatencyMs: entry.summary.averageLatencyMs || fromBuckets.averageLatencyMs,
+    latestLatencyMs: entry.summary.latestLatencyMs || fromBuckets.latestLatencyMs,
+    windowMinutes: entry.summary.windowSeconds
+      ? entry.summary.windowSeconds / 60
+      : fromBuckets.windowMinutes,
+  };
+}
+
 export function getProviderRecentStats(
   usageByProvider: ProviderRecentUsageMap,
   provider: string,
@@ -228,6 +255,13 @@ export function getOpenAIProviderRecentWindowStats(
   usageByProvider: ProviderRecentUsageMap
 ): { success: number; failure: number } {
   return sumRecentRequests(collectOpenAIProviderRecentBuckets(provider, usageByProvider));
+}
+
+export function getOpenAIProviderRecentMetrics(
+  provider: OpenAIProviderConfig,
+  usageByProvider: ProviderRecentUsageMap
+): RecentRequestWindowStats {
+  return getRecentRequestWindowStats(collectOpenAIProviderRecentBuckets(provider, usageByProvider));
 }
 
 export function getOpenAIProviderRecentStatusData(

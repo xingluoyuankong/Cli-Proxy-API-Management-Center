@@ -980,7 +980,13 @@
   "status_bar": {
     "success_short": "✓",
     "failure_short": "✗",
-    "no_requests": "無請求"
+    "no_requests": "無請求",
+    "instant_rpm": "瞬時速率",
+    "average_rpm": "平均速率",
+    "instant_latency": "瞬時延遲",
+    "avg_latency": "平均延遲",
+    "latest_latency": "最新延遲",
+    "rpm_unit": "次/分"
   },
   "service_health": {
     "title": "服務健康監測",

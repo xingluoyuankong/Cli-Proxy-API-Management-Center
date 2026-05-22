@@ -1,6 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { StatusBarData, StatusBlockDetail } from '@/utils/recentRequests';
+import {
+  formatExactNumber,
+  formatLatencyMs,
+  formatRequestsPerMinute,
+  type StatusBarData,
+  type StatusBlockDetail,
+} from '@/utils/recentRequests';
 import defaultStyles from '@/pages/AiProvidersPage.module.scss';
 
 /**
@@ -45,7 +51,7 @@ interface ProviderStatusBarProps {
 }
 
 export function ProviderStatusBar({ statusData, styles: stylesProp }: ProviderStatusBarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const s = (stylesProp || defaultStyles) as StylesModule;
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
   const blocksRef = useRef<HTMLDivElement>(null);
@@ -99,16 +105,28 @@ export function ProviderStatusBar({ statusData, styles: stylesProp }: ProviderSt
   const renderTooltip = (detail: StatusBlockDetail, idx: number) => {
     const total = detail.success + detail.failure;
     const posClass = getTooltipPositionClass(idx, statusData.blockDetails.length);
-    const timeRange = `${formatTime(detail.startTime)} – ${formatTime(detail.endTime)}`;
+    const timeRange = `${formatTime(detail.startTime)} - ${formatTime(detail.endTime)}`;
+    const locale = i18n.language;
+    const rpmUnit = t('status_bar.rpm_unit');
 
     return (
       <div className={`${s.statusTooltip} ${posClass}`}>
         <span className={s.tooltipTime}>{timeRange}</span>
         {total > 0 ? (
           <span className={s.tooltipStats}>
-            <span className={s.tooltipSuccess}>{t('status_bar.success_short')} {detail.success}</span>
-            <span className={s.tooltipFailure}>{t('status_bar.failure_short')} {detail.failure}</span>
+            <span className={s.tooltipSuccess}>
+              {t('status_bar.success_short')} {formatExactNumber(detail.success, locale)}
+            </span>
+            <span className={s.tooltipFailure}>
+              {t('status_bar.failure_short')} {formatExactNumber(detail.failure, locale)}
+            </span>
             <span className={s.tooltipRate}>({(detail.rate * 100).toFixed(1)}%)</span>
+            <span className={s.tooltipRate}>
+              {t('status_bar.instant_rpm')}: {formatRequestsPerMinute(detail.requestsPerMinute, locale, rpmUnit)}
+            </span>
+            <span className={s.tooltipRate}>
+              {t('status_bar.avg_latency')}: {formatLatencyMs(detail.avgLatencyMs, locale)}
+            </span>
           </span>
         ) : (
           <span className={s.tooltipStats}>{t('status_bar.no_requests')}</span>

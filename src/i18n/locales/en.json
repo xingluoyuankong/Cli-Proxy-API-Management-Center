@@ -956,7 +956,13 @@
   "status_bar": {
     "success_short": "✓",
     "failure_short": "✗",
-    "no_requests": "No requests"
+    "no_requests": "No requests",
+    "instant_rpm": "Current rate",
+    "average_rpm": "Average rate",
+    "instant_latency": "Current latency",
+    "avg_latency": "Average latency",
+    "latest_latency": "Latest latency",
+    "rpm_unit": "rpm"
   },
   "service_health": {
     "title": "Service Health",

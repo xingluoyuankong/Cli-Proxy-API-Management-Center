@@ -956,7 +956,13 @@
   "status_bar": {
     "success_short": "✓",
     "failure_short": "✗",
-    "no_requests": "无请求"
+    "no_requests": "无请求",
+    "instant_rpm": "瞬时速率",
+    "average_rpm": "平均速率",
+    "instant_latency": "瞬时延迟",
+    "avg_latency": "平均延迟",
+    "latest_latency": "最新延迟",
+    "rpm_unit": "次/分"
   },
   "service_health": {
     "title": "服务健康监测",

@@ -951,7 +951,13 @@
   "status_bar": {
     "success_short": "✓",
     "failure_short": "✗",
-    "no_requests": "Нет запросов"
+    "no_requests": "Нет запросов",
+    "instant_rpm": "Текущая скорость",
+    "average_rpm": "Средняя скорость",
+    "instant_latency": "Текущая задержка",
+    "avg_latency": "Средняя задержка",
+    "latest_latency": "Последняя задержка",
+    "rpm_unit": "запр/мин"
   },
   "service_health": {
     "title": "Состояние сервиса",

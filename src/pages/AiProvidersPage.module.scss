@@ -446,6 +446,18 @@ $openai-toolbar-control-height: 36px;
   border-color: var(--failure-badge-border);
 }
 
+.statInfo {
+  background-color: var(--info-badge-bg, #e0f2fe);
+  color: var(--info-badge-text, #075985);
+  border-color: var(--info-badge-border, #7dd3fc);
+}
+
+.statLatency {
+  background-color: var(--accent-tertiary, #f3f4f6);
+  color: var(--text-secondary);
+  border-color: var(--border-secondary);
+}
+
 // 字段行样式：标签 + 值
 .fieldRow {
   display: flex;
@@ -664,15 +676,17 @@ $openai-toolbar-control-height: 36px;
   word-break: break-word;
 
   &::before {
-    content: '| Proxy: ';
+    content: '| ';
     color: var(--text-quaternary);
   }
 }
 
 .apiKeyEntryStats {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
+  justify-content: flex-end;
 }
 
 .apiKeyEntryStat {
@@ -697,6 +711,11 @@ $openai-toolbar-control-height: 36px;
 .apiKeyEntryStatFailure {
   background: var(--failure-badge-bg);
   color: var(--failure-badge-text);
+}
+
+.apiKeyEntryStatInfo {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 // OpenAI 模型发现（二级界面）
@@ -918,7 +937,9 @@ $openai-toolbar-control-height: 36px;
 .tooltipStats {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  max-width: min(320px, calc(100vw - 32px));
 }
 
 .tooltipSuccess {

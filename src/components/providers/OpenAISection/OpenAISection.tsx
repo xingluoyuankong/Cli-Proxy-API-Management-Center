@@ -18,15 +18,23 @@ import iconOpenaiLight from '@/assets/icons/openai-light.svg';
 import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
 import type { OpenAIProviderConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import { statusBarDataFromRecentRequests } from '@/utils/recentRequests';
+import {
+  formatExactNumber,
+  formatLatencyMs,
+  formatRequestsPerMinute,
+  statusBarDataFromRecentRequests,
+} from '@/utils/recentRequests';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderStatusBar } from '../ProviderStatusBar';
+import { ProviderUsageStats } from '../ProviderUsageStats';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import {
+  getOpenAIProviderRecentMetrics,
   getOpenAIProviderRecentWindowStats,
   getOpenAIProviderRecentStatusData,
   getOpenAIProviderTotalStats,
   getOpenAIProviderKey,
+  getProviderRecentMetrics,
   getProviderTotalStats,
   type ProviderRecentUsageMap,
 } from '../utils';
@@ -81,7 +89,9 @@ export function OpenAISection({
   onDelete,
   onToggle,
 }: OpenAISectionProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
+  const rpmUnit = t('status_bar.rpm_unit');
   const pageTransitionLayer = usePageTransitionLayer();
   const isTransitionAnimating = pageTransitionLayer?.isAnimating ?? false;
   const actionsDisabled = disableControls || loading || isSwitching;
@@ -526,6 +536,7 @@ export function OpenAISection({
 
   const renderProviderCard = ({ config: provider, originalIndex }: IndexedOpenAIProvider) => {
     const stats = getOpenAIProviderTotalStats(provider, usageByProvider);
+    const metrics = getOpenAIProviderRecentMetrics(provider, usageByProvider);
     const headerEntries = Object.entries(provider.headers || {});
     const apiKeyEntries = provider.apiKeyEntries || [];
     const statusData =
@@ -583,6 +594,12 @@ export function OpenAISection({
                     entry.apiKey,
                     provider.baseUrl
                   );
+                  const entryMetrics = getProviderRecentMetrics(
+                    usageByProvider,
+                    provider.name,
+                    entry.apiKey,
+                    provider.baseUrl
+                  );
                   return (
                     <div
                       key={getApiKeyEntryRenderKey(entry, entryIndex)}
@@ -591,18 +608,26 @@ export function OpenAISection({
                       <span className={styles.apiKeyEntryIndex}>{entryIndex + 1}</span>
                       <span className={styles.apiKeyEntryKey}>{maskApiKey(entry.apiKey)}</span>
                       {entry.proxyUrl && (
-                        <span className={styles.apiKeyEntryProxy}>{entry.proxyUrl}</span>
+                        <span className={styles.apiKeyEntryProxy}>
+                          {t('common.proxy_url')}: {entry.proxyUrl}
+                        </span>
                       )}
                       <div className={styles.apiKeyEntryStats}>
                         <span
                           className={`${styles.apiKeyEntryStat} ${styles.apiKeyEntryStatSuccess}`}
                         >
-                          <IconCheck size={12} /> {entryStats.success}
+                          <IconCheck size={12} /> {formatExactNumber(entryStats.success, locale)}
                         </span>
                         <span
                           className={`${styles.apiKeyEntryStat} ${styles.apiKeyEntryStatFailure}`}
                         >
-                          <IconX size={12} /> {entryStats.failure}
+                          <IconX size={12} /> {formatExactNumber(entryStats.failure, locale)}
+                        </span>
+                        <span className={`${styles.apiKeyEntryStat} ${styles.apiKeyEntryStatInfo}`}>
+                          {t('status_bar.instant_rpm')}: {formatRequestsPerMinute(entryMetrics.instantRpm, locale, rpmUnit)}
+                        </span>
+                        <span className={`${styles.apiKeyEntryStat} ${styles.apiKeyEntryStatInfo}`}>
+                          {t('status_bar.avg_latency')}: {formatLatencyMs(entryMetrics.averageLatencyMs, locale)}
                         </span>
                       </div>
                     </div>
@@ -633,14 +658,7 @@ export function OpenAISection({
               <span className={styles.fieldValue}>{provider.testModel}</span>
             </div>
           )}
-          <div className={styles.cardStats}>
-            <span className={`${styles.statPill} ${styles.statSuccess}`}>
-              {t('stats.success')}: {stats.success}
-            </span>
-            <span className={`${styles.statPill} ${styles.statFailure}`}>
-              {t('stats.failure')}: {stats.failure}
-            </span>
-          </div>
+          <ProviderUsageStats totals={stats} metrics={metrics} />
           <ProviderStatusBar statusData={statusData} />
         </div>
         <div className={styles.openaiProviderActions}>

@@ -76,7 +76,7 @@ import {
   isKimiFile,
   isRuntimeOnlyAuthFile,
 } from '@/utils/quota';
-import { normalizeAuthIndex } from '@/utils/usage';
+import { normalizeAuthIndex } from '@/utils/authIndex';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -1138,6 +1138,13 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
 
   const hasClaudePro = normalizeFlagValue(profile.account?.has_claude_pro);
   if (hasClaudePro) return 'plan_pro';
+
+  const organizationType = normalizeStringValue(profile.organization?.organization_type)?.toLowerCase();
+  const subscriptionStatus = normalizeStringValue(profile.organization?.subscription_status)?.toLowerCase();
+
+  if (organizationType === 'claude_team' && subscriptionStatus === 'active') {
+    return 'plan_team';
+  }
 
   if (hasClaudeMax === false && hasClaudePro === false) return 'plan_free';
 

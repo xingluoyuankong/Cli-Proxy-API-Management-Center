@@ -6,24 +6,21 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import iconVertex from '@/assets/icons/vertex.svg';
 import type { ProviderKeyConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import {
-  buildCandidateUsageSourceIds,
-  calculateStatusBarData,
-  type KeyStats,
-} from '@/utils/usage';
-import {
-  collectUsageDetailsForCandidates,
-  type UsageDetailsBySource,
-} from '@/utils/usageIndex';
+import { statusBarDataFromRecentRequests } from '@/utils/recentRequests';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ProviderStatusBar } from '../ProviderStatusBar';
-import { getStatsBySource, hasDisableAllModelsRule } from '../utils';
+import {
+  getProviderConfigKey,
+  getProviderRecentBuckets,
+  getProviderTotalStats,
+  hasDisableAllModelsRule,
+  type ProviderRecentUsageMap,
+} from '../utils';
 
 interface VertexSectionProps {
   configs: ProviderKeyConfig[];
-  keyStats: KeyStats;
-  usageDetailsBySource: UsageDetailsBySource;
+  usageByProvider: ProviderRecentUsageMap;
   loading: boolean;
   disableControls: boolean;
   isSwitching: boolean;
@@ -35,8 +32,7 @@ interface VertexSectionProps {
 
 export function VertexSection({
   configs,
-  keyStats,
-  usageDetailsBySource,
+  usageByProvider,
   loading,
   disableControls,
   isSwitching,
@@ -50,23 +46,21 @@ export function VertexSection({
   const toggleDisabled = disableControls || loading || isSwitching;
 
   const statusBarCache = useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof calculateStatusBarData>>();
+    const cache = new Map<string, ReturnType<typeof statusBarDataFromRecentRequests>>();
 
-    configs.forEach((config) => {
+    configs.forEach((config, index) => {
       if (!config.apiKey) return;
-      const candidates = buildCandidateUsageSourceIds({
-        apiKey: config.apiKey,
-        prefix: config.prefix,
-      });
-      if (!candidates.length) return;
+      const configKey = getProviderConfigKey(config, index);
       cache.set(
-        config.apiKey,
-        calculateStatusBarData(collectUsageDetailsForCandidates(usageDetailsBySource, candidates))
+        configKey,
+        statusBarDataFromRecentRequests(
+          getProviderRecentBuckets(usageByProvider, 'vertex', config.apiKey, config.baseUrl)
+        )
       );
     });
 
     return cache;
-  }, [configs, usageDetailsBySource]);
+  }, [configs, usageByProvider]);
 
   return (
     <>
@@ -86,11 +80,11 @@ export function VertexSection({
         <ProviderList<ProviderKeyConfig>
           items={configs}
           loading={loading}
-          keyField={(item) => item.apiKey}
+          keyField={(item, index) => getProviderConfigKey(item, index)}
           emptyTitle={t('ai_providers.vertex_empty_title')}
           emptyDescription={t('ai_providers.vertex_empty_desc')}
-          onEdit={onEdit}
-          onDelete={onDelete}
+          onEdit={(_, index) => onEdit(index)}
+          onDelete={(_, index) => onDelete(index)}
           actionsDisabled={actionsDisabled}
           getRowDisabled={(item) => hasDisableAllModelsRule(item.excludedModels)}
           renderExtraActions={(item, index) => (
@@ -102,11 +96,18 @@ export function VertexSection({
             />
           )}
           renderContent={(item, index) => {
-            const stats = getStatsBySource(item.apiKey, keyStats, item.prefix);
+            const stats = getProviderTotalStats(
+              usageByProvider,
+              'vertex',
+              item.apiKey,
+              item.baseUrl
+            );
             const headerEntries = Object.entries(item.headers || {});
             const configDisabled = hasDisableAllModelsRule(item.excludedModels);
             const excludedModels = item.excludedModels ?? [];
-            const statusData = statusBarCache.get(item.apiKey) || calculateStatusBarData([]);
+            const statusData =
+              statusBarCache.get(getProviderConfigKey(item, index)) ||
+              statusBarDataFromRecentRequests([]);
 
             return (
               <Fragment>

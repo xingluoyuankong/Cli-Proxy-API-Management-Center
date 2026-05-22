@@ -12,7 +12,7 @@ import {
   useModelsStore,
   useThemeStore,
 } from '@/stores';
-import { configApi, versionApi } from '@/services/api';
+import { configApi, runtimeCacheApi, versionApi } from '@/services/api';
 import { apiKeysApi } from '@/services/api/apiKeys';
 import { classifyModels } from '@/utils/models';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
@@ -26,6 +26,7 @@ import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconKimiDark from '@/assets/icons/kimi-dark.svg';
 import iconGlm from '@/assets/icons/glm.svg';
 import iconGrok from '@/assets/icons/grok.svg';
+import iconGrokDark from '@/assets/icons/grok-dark.svg';
 import iconDeepseek from '@/assets/icons/deepseek.svg';
 import iconMinimax from '@/assets/icons/minimax.svg';
 import styles from './SystemPage.module.scss';
@@ -37,7 +38,7 @@ const MODEL_CATEGORY_ICONS: Record<string, string | { light: string; dark: strin
   qwen: iconQwen,
   kimi: { light: iconKimiLight, dark: iconKimiDark },
   glm: iconGlm,
-  grok: iconGrok,
+  grok: { light: iconGrok, dark: iconGrokDark },
   deepseek: iconDeepseek,
   minimax: iconMinimax,
 };
@@ -92,6 +93,7 @@ export function SystemPage() {
   const [requestLogTouched, setRequestLogTouched] = useState(false);
   const [requestLogSaving, setRequestLogSaving] = useState(false);
   const [checkingVersion, setCheckingVersion] = useState(false);
+  const [clearingRuntimeCache, setClearingRuntimeCache] = useState(false);
 
   const apiKeysCache = useRef<string[]>([]);
   const versionTapCount = useRef(0);
@@ -221,6 +223,31 @@ export function SystemPage() {
       },
     });
   };
+
+  const handleClearRuntimeCache = useCallback(() => {
+    showConfirmation({
+      title: t('system_info.runtime_cache_clear_title'),
+      message: t('system_info.runtime_cache_clear_confirm'),
+      variant: 'danger',
+      confirmText: t('system_info.runtime_cache_clear_confirm_action'),
+      onConfirm: async () => {
+        setClearingRuntimeCache(true);
+        try {
+          await runtimeCacheApi.clear();
+          showNotification(t('system_info.runtime_cache_clear_success'), 'success');
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+          showNotification(
+            `${t('system_info.runtime_cache_clear_failed')}${message ? `: ${message}` : ''}`,
+            'error'
+          );
+        } finally {
+          setClearingRuntimeCache(false);
+        }
+      },
+    });
+  }, [showConfirmation, showNotification, t]);
 
   const openRequestLogModal = useCallback(() => {
     setRequestLogTouched(false);
@@ -513,6 +540,19 @@ export function SystemPage() {
           <div className={styles.clearLoginActions}>
             <Button variant="danger" onClick={handleClearLoginStorage}>
               {t('system_info.clear_login_button')}
+            </Button>
+          </div>
+        </Card>
+
+        <Card title={t('system_info.runtime_cache_clear_title')}>
+          <p className={styles.sectionDescription}>{t('system_info.runtime_cache_clear_desc')}</p>
+          <div className={styles.clearLoginActions}>
+            <Button
+              variant="danger"
+              onClick={handleClearRuntimeCache}
+              loading={clearingRuntimeCache}
+            >
+              {t('system_info.runtime_cache_clear_button')}
             </Button>
           </div>
         </Card>

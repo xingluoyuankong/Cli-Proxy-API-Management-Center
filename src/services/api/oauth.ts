@@ -9,7 +9,8 @@ export type OAuthProvider =
   | 'anthropic'
   | 'antigravity'
   | 'gemini-cli'
-  | 'kimi';
+  | 'kimi'
+  | 'xai';
 
 export interface OAuthStartResponse {
   url: string;
@@ -20,16 +21,13 @@ export interface OAuthCallbackResponse {
   status: 'ok';
 }
 
-export interface IFlowCookieAuthResponse {
-  status: 'ok' | 'error';
-  error?: string;
-  saved_path?: string;
-  email?: string;
-  expired?: string;
-  type?: string;
-}
-
-const WEBUI_SUPPORTED: OAuthProvider[] = ['codex', 'anthropic', 'antigravity', 'gemini-cli'];
+const WEBUI_SUPPORTED: OAuthProvider[] = [
+  'codex',
+  'anthropic',
+  'antigravity',
+  'gemini-cli',
+  'xai'
+];
 const CALLBACK_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
   'gemini-cli': 'gemini'
 };
@@ -59,9 +57,5 @@ export const oauthApi = {
       provider: callbackProvider,
       redirect_url: redirectUrl
     });
-  },
-
-  /** iFlow cookie 认证 */
-  iflowCookieAuth: (cookie: string) =>
-    apiClient.post<IFlowCookieAuthResponse>('/iflow-auth-url', { cookie })
+  }
 };

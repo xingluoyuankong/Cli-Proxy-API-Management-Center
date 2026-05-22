@@ -6,24 +6,21 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import iconCodex from '@/assets/icons/codex.svg';
 import type { ProviderKeyConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import {
-  buildCandidateUsageSourceIds,
-  calculateStatusBarData,
-  type KeyStats,
-} from '@/utils/usage';
-import {
-  collectUsageDetailsForCandidates,
-  type UsageDetailsBySource,
-} from '@/utils/usageIndex';
+import { statusBarDataFromRecentRequests } from '@/utils/recentRequests';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ProviderStatusBar } from '../ProviderStatusBar';
-import { getStatsBySource, hasDisableAllModelsRule } from '../utils';
+import {
+  getProviderConfigKey,
+  getProviderRecentBuckets,
+  getProviderTotalStats,
+  hasDisableAllModelsRule,
+  type ProviderRecentUsageMap,
+} from '../utils';
 
 interface CodexSectionProps {
   configs: ProviderKeyConfig[];
-  keyStats: KeyStats;
-  usageDetailsBySource: UsageDetailsBySource;
+  usageByProvider: ProviderRecentUsageMap;
   loading: boolean;
   disableControls: boolean;
   isSwitching: boolean;
@@ -35,8 +32,7 @@ interface CodexSectionProps {
 
 export function CodexSection({
   configs,
-  keyStats,
-  usageDetailsBySource,
+  usageByProvider,
   loading,
   disableControls,
   isSwitching,
@@ -50,23 +46,21 @@ export function CodexSection({
   const toggleDisabled = disableControls || loading || isSwitching;
 
   const statusBarCache = useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof calculateStatusBarData>>();
+    const cache = new Map<string, ReturnType<typeof statusBarDataFromRecentRequests>>();
 
-    configs.forEach((config) => {
+    configs.forEach((config, index) => {
       if (!config.apiKey) return;
-      const candidates = buildCandidateUsageSourceIds({
-        apiKey: config.apiKey,
-        prefix: config.prefix,
-      });
-      if (!candidates.length) return;
+      const configKey = getProviderConfigKey(config, index);
       cache.set(
-        config.apiKey,
-        calculateStatusBarData(collectUsageDetailsForCandidates(usageDetailsBySource, candidates))
+        configKey,
+        statusBarDataFromRecentRequests(
+          getProviderRecentBuckets(usageByProvider, 'codex', config.apiKey, config.baseUrl)
+        )
       );
     });
 
     return cache;
-  }, [configs, usageDetailsBySource]);
+  }, [configs, usageByProvider]);
 
   return (
     <>
@@ -86,11 +80,11 @@ export function CodexSection({
         <ProviderList<ProviderKeyConfig>
           items={configs}
           loading={loading}
-          keyField={(item) => item.apiKey}
+          keyField={(item, index) => getProviderConfigKey(item, index)}
           emptyTitle={t('ai_providers.codex_empty_title')}
           emptyDescription={t('ai_providers.codex_empty_desc')}
-          onEdit={onEdit}
-          onDelete={onDelete}
+          onEdit={(_, index) => onEdit(index)}
+          onDelete={(_, index) => onDelete(index)}
           actionsDisabled={actionsDisabled}
           getRowDisabled={(item) => hasDisableAllModelsRule(item.excludedModels)}
           renderExtraActions={(item, index) => (
@@ -101,12 +95,19 @@ export function CodexSection({
               onChange={(value) => void onToggle(index, value)}
             />
           )}
-          renderContent={(item) => {
-            const stats = getStatsBySource(item.apiKey, keyStats, item.prefix);
+          renderContent={(item, index) => {
+            const stats = getProviderTotalStats(
+              usageByProvider,
+              'codex',
+              item.apiKey,
+              item.baseUrl
+            );
             const headerEntries = Object.entries(item.headers || {});
             const configDisabled = hasDisableAllModelsRule(item.excludedModels);
             const excludedModels = item.excludedModels ?? [];
-            const statusData = statusBarCache.get(item.apiKey) || calculateStatusBarData([]);
+            const statusData =
+              statusBarCache.get(getProviderConfigKey(item, index)) ||
+              statusBarDataFromRecentRequests([]);
 
             return (
               <Fragment>

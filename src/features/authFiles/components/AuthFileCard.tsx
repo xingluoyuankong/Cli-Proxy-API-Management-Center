@@ -76,6 +76,17 @@ const EMAIL_KEYS = [
   'userEmail',
 ];
 const EMAIL_NESTED_KEYS = ['metadata', 'attributes', 'account', 'profile', 'user'];
+const EMAIL_FILE_PREFIX_PATTERN =
+  /^(codex|claude|gemini-cli|gemini|antigravity|kimi|qwen|xai|iflow|vertex|aistudio)-/i;
+const EMAIL_FILE_SUFFIX_MARKERS = [
+  '.plus.cpa',
+  '.pro.cpa',
+  '.free.cpa',
+  '.cpa',
+  '-free',
+  '-plus',
+  '-pro',
+];
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -85,6 +96,25 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const extractEmailAddress = (value: unknown): string => {
   if (typeof value !== 'string') return '';
   return value.trim().match(EMAIL_PATTERN)?.[0] ?? '';
+};
+
+const extractEmailFromFileName = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const normalizedName = value.trim().replace(/\.json$/i, '').replace(EMAIL_FILE_PREFIX_PATTERN, '');
+  const atIndex = normalizedName.indexOf('@');
+  if (atIndex <= 0) return '';
+
+  const local = normalizedName.slice(0, atIndex).match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i)?.[0];
+  if (!local) return '';
+
+  const domainWithSuffix = normalizedName.slice(atIndex + 1);
+  const cutIndex = EMAIL_FILE_SUFFIX_MARKERS.reduce<number>((best, marker) => {
+    const index = domainWithSuffix.toLowerCase().indexOf(marker);
+    return index > 0 && (best === -1 || index < best) ? index : best;
+  }, -1);
+  const domain = (cutIndex > 0 ? domainWithSuffix.slice(0, cutIndex) : domainWithSuffix).trim();
+
+  return extractEmailAddress(`${local}@${domain}`);
 };
 
 const findEmailInRecord = (record: Record<string, unknown> | null): string => {
@@ -108,7 +138,12 @@ const resolveAuthFileEmail = (file: AuthFileItem): string => {
 
   const accountType =
     typeof record.account_type === 'string' ? record.account_type.trim().toLowerCase() : '';
-  return accountType === 'oauth' ? extractEmailAddress(record.account) : '';
+  if (accountType === 'oauth') {
+    const accountEmail = extractEmailAddress(record.account);
+    if (accountEmail) return accountEmail;
+  }
+
+  return extractEmailFromFileName(record.name);
 };
 
 export function AuthFileCard(props: AuthFileCardProps) {
